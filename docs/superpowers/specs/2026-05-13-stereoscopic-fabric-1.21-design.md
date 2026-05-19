@@ -1,15 +1,15 @@
 # Stereoscopic — Fabric 1.21.11 stereo SBS rendering
 
 **Date:** 2026-05-13
-**Status:** Draft (pre-implementation)
+**Status:** Implementation in progress — Phases 1–6 + Task 20 complete; Iris (Tasks 19, 21, 22) partial / partly reverted by an unauthorized cleanup commit; async cursor (Tasks 23–27) interface-only. See `## Real Status (2026-05-16)` in the implementation plan for the truth table and remaining work.
 **Repository:** `C:\code\Stereoscopic`
 **Reference implementation:** `C:\code\Angelica`, branch `stereo-sbs` (Forge 1.7.10)
 
 ## Overview
 
-`Stereoscopic` is a client-side Fabric mod for Minecraft 1.21.11 that renders the game in side-by-side stereoscopic 3D for VR virtual-monitor viewers (Quest / Index / Vive via Virtual Desktop or Steam Link) and 3D-capable displays. It is a port of the stereo SBS implementation already shipping on the Angelica 1.7.10 branch, restructured for Fabric, the modern Minecraft rendering pipeline, and standalone distribution alongside Sodium and Iris.
+`Stereoscopic` is a client-side Fabric mod for Minecraft 1.21.11 that renders the game in side-by-side stereoscopic 3D for downstream consumption by VR viewers and 3D-capable displays. It is a port of the stereo SBS implementation already shipping on the Angelica 1.7.10 branch, restructured for Fabric, the modern Minecraft rendering pipeline, and standalone distribution alongside Sodium and Iris.
 
-Only the `SBS_HALF` layout is implemented in v1: each eye is rendered into half the screen width at the monoscopic aspect ratio, with the world horizontally compressed to fit. This is the layout supported by all major VR SBS-3D viewers.
+Only the `SBS_HALF` layout is implemented in v1: each eye is rendered into half the screen width at the monoscopic aspect ratio, with the world horizontally compressed to fit. The viewer-side setup (which app interprets the SBS frame, how the user pipes it to their HMD or 3D display) is out of scope for this spec.
 
 ## Goals
 
@@ -39,9 +39,11 @@ Only the `SBS_HALF` layout is implemented in v1: each eye is rendered into half 
 
 ### Dependency stance
 
-- **Sodium 0.8.7** is a hard dependency. Stereo rendering is built on top of Sodium's world renderer; without Sodium present the mod fails to load.
-- **Iris 1.10.7** is optional (`recommends` in `fabric.mod.json`). Iris-coupled mixins live in a separate mixin config with `"required": false`; missing Iris silently drops the shader-pack feature group (D) and leaves the rest of the mod functional.
-- **Fabric Loader 0.19.0** minimum; **Minecraft 1.21.11**; **Java 21**.
+- **Sodium 0.8.11** (resolved from spec target 0.8.7 — 0.8.7 exists but 0.8.11 is the latest stable for 1.21.11). Hard dependency; without Sodium the mod fails to load.
+- **Iris 1.10.7** optional (`recommends` in `fabric.mod.json`). Iris-coupled mixins live in a separate mixin config with `"required": false`; missing Iris silently drops the shader-pack feature group (D) and leaves the rest of the mod functional.
+- **Fabric Loader 0.19.2** minimum (resolved from spec target 0.19.0 — 0.19.0 exists but 0.19.2 is the nearest stable). **Minecraft 1.21.11**; **Java 21**.
+
+> **Resolved versions live in `docs/superpowers/notes/versions.md`.** That file is authoritative for build coordinates; the numbers above are kept in sync but `versions.md` is the source of truth. Updates to any dependency should update both.
 
 ### Source tree
 
@@ -51,7 +53,6 @@ src/main/
     Stereoscopic.java                      (ClientModInitializer entrypoint)
     core/
       StereoMode.java                      (OFF, SBS_HALF)
-      StereoDebugEye.java                  (OFF, LEFT, RIGHT)
       StereoState.java                     (per-frame singleton)
       StereoOptions.java                   (live runtime options + persistence)
     render/
@@ -138,8 +139,9 @@ When `mode == OFF` all hooks short-circuit and rendering is monoscopic.
 ### Enums
 
 - `StereoMode { OFF, SBS_HALF }`. `isActive()`, `isSideBySide()`, `isHalf()` helpers. Open to extension without changing call sites.
-- `StereoDebugEye { OFF, LEFT, RIGHT }`. Forces a one-eye monoscopic render so per-eye camera offset and per-eye RenderTargets can be validated without a headset.
 - (No `StereoHudMode` — HUD is always duplicated when stereo is active.)
+
+> **v0.1.0 removal:** `StereoDebugEye { OFF, LEFT, RIGHT }` was originally specified as a sign-convention validation tool (force one eye, render mono-style). After Task 9 validated the sign convention end-to-end it was removed entirely — not just hidden from the GUI. The two-pass world+HUD path is the only correctness verification now, and the dev-only JSON toggle was deemed not worth carrying.
 
 ### `StereoState` (singleton)
 
@@ -151,7 +153,7 @@ Same shape as the 1.7.10 reference. Fields and methods:
 - Frame-cached `frameMode` and `frameIpd` snapshot at `beginFrame()` so mid-frame config flips can't cause inconsistency.
 - `getEyeOffset()` returns `+ipd/2` for LEFT and `-ipd/2` for RIGHT. **Signs match 1.7.10.** The vanilla anaglyph code uses the opposite signs, which produces eye-swapped stereo to a VR viewer. See `StereoState.getEyeOffset()` JavaDoc in the 1.7.10 reference for the full derivation.
 - `currentEyeIndex()` returns 0 for LEFT/MONO, 1 for RIGHT — used for indexing per-eye arrays (Iris RenderTargets, hand depth).
-- `stereoEyeCount()` returns 1 or 2. **Reads `StereoOptions` directly, not the cached `active` flag**, because Iris pipeline init can fire before the first `beginFrame()`; reading the cached flag at that point would allocate mono targets that contaminate the first stereo frame until a manual shader reload.
+- `stereoEyeCount()` returns 1 or 2. **Reads `StereoOptions` directly, not the cached `active` flag** — matches Angelica commit `e2fa3064` ("stereoEyeCount reads config, not cached flag"). The cached flag is only meaningful inside the per-frame window between `beginFrame()` and `endFrame()`; `RenderTargets` allocation can happen outside that window, and we need it to see the configured eye count regardless.
 - `endFrame()` clears `active` and resets `currentEye = MONO`, but **does not clear** `frameMode` / `frameIpd` — they must remain readable for any post-frame callbacks. `beginFrame()` overwrites them next frame.
 
 ### `StereoOptions` (live runtime options)
@@ -160,7 +162,6 @@ In-memory singleton with three fields:
 
 - `mode: StereoMode = OFF`
 - `ipd: float = 0.064` (clamped to 0.0..0.5)
-- `debugForceEye: StereoDebugEye = OFF`
 
 Read by `StereoState.beginFrame()`. Written by the Sodium options page (Section "Sodium integration"). Live-apply — changing a value affects the next frame's render with no Apply button gating from our side.
 
@@ -205,7 +206,7 @@ Applied as a view-matrix translation. The translation goes on the **view matrix*
 
 ### Viewport intercept (`MixinRenderSystem.viewport`)
 
-When `StereoState.inWorldPass` is true and the caller is setting the viewport to the full main framebuffer size, remap to the current eye rect. This catches Iris's mid-pipeline viewport changes (composite passes, deferred passes, `Pass.use()`) automatically. `PerEyeRenderer.viewportRaw(...)` bypasses the intercept when we intentionally set the per-eye viewport.
+When `StereoState.inWorldPass` is true and the caller is setting the viewport to the full main framebuffer size, remap to the current eye rect. This catches Iris's mid-pipeline viewport changes — every composite/deferred pass calls `viewport` when it binds its output framebuffer, so the intercept transparently redirects each pass into the active eye's half. `PerEyeRenderer.viewportRaw(...)` bypasses the intercept when we intentionally set the per-eye viewport.
 
 ### Scissor intercept (`MixinRenderSystem.enableScissor`)
 
@@ -226,7 +227,9 @@ Direct port of the 1.7.10 `glScissor` intercept.
 
 ### GuiGraphics state reset between eye passes
 
-After each eye's `gui.render` / `screen.render` call, `PerEyeRenderer` calls `graphics.flush()` and resets the pose stack so left-eye state doesn't contaminate right-eye render. This is the 1.21 analogue of the 1.7.10 "reset GUI lighting state between eye drawScreen calls" — different mechanism (no fixed-function lighting in Core profile), same problem class.
+The 1.7.10 reference (commit `2bc350a8`) resets `RenderHelper.disableStandardItemLighting()` + `glColor4f(1,1,1,1)` between eye `drawScreen` calls because vanilla `GuiContainer.drawScreen` leaves lighting state enabled at exit and bleeds into the right-eye pass.
+
+1.21 has no fixed-function lighting in core profile, but the same problem class — left-eye-pass state contaminating the right-eye pass — likely surfaces through `DrawContext`'s pose stack or batched draw queues. The exact 1.21 analogue (`DrawContext.draw()`? pose-stack push/pop? something else?) is **deferred to the implementation phase**: do nothing initially, watch for visual artifacts during the manual test pass, and add the minimum reset that fixes them. The plan flags this as a known gap, not a pre-decided fix.
 
 ### Mouse delta halving
 
@@ -253,13 +256,15 @@ All Iris-coupled mixins live in `stereoscopic-iris.mixins.json` with `"required"
 - On bind: index by `StereoState.currentEyeIndex()`.
 - On resize: resize both eye banks.
 
-Without this duplication, a kernel-based composite shader (bloom, SSAO, temporal effects) running on the right eye samples pixels from the left eye and produces the asymmetric per-eye artifact pattern documented in `project_stereo_temporal_shaders`.
+Without this duplication, a kernel-based composite shader (bloom, SSAO, any pass that samples its own colortex with neighbour offsets) running on the right eye samples pixels left-behind from the left-eye pass and produces eye-asymmetric output along the seam between halves.
+
+This is a separate problem from temporal-accumulation artifacts (TAA / motion blur / temporal AO), which arise from shared *previous-frame* history across eyes and are fixed by the per-eye uniform slots in the next section. The Angelica reference fixes both in commit `c28a73d7`; we port both.
 
 ### Per-eye uniforms
 
 - `MixinCameraUniforms` — `cameraPosition` value itself is **not** offset by `getEyeOffset()` (the view matrix already carries the offset; cameraPosition stays at the player's actual world position, same for both eyes). What we do add is **per-eye storage slots** for `currentCameraPosition` and `previousCameraPosition`, indexed by `currentEyeIndex()`. Without per-eye slots, the right eye's `update()` would overwrite `previousCameraPosition` with the left eye's same-frame current position — shaders would then see zero motion between previous and current on the right eye, desyncing every temporal effect (TAA, motion blur, motion vectors). Port of the 1.7.10 `CameraUniforms` diff.
 - `MixinMatrixUniforms` — `modelViewMatrix` and `gbufferModelView` already include the eye offset from our view-matrix translation in `MixinGameRenderer`; no additional math, but an `@Inject` assertion confirms the matrix flowing through Iris matches what we set.
-- `MixinViewportUniforms` — `viewWidth` / `viewHeight` return the full main-FB dimensions, **not** the eye rect. This preserves the monoscopic aspect ratio inside Iris's tile-layout math (Complementary's `colortexN` tile layout uses `max(vec2(viewWidth, viewHeight) / vec2(1920, 1080), 1.0)` — a non-square ratio causes tile reads to clamp past the texture edge and produce dark patchwork artifacts).
+- `MixinViewportUniforms` — `viewWidth` / `viewHeight` return the full main-FB dimensions, **not** the eye rect. Iris's composite passes (and shader-pack tile-layout math built on top) treat these uniforms as the resolution shaders should reason about; feeding them an eye rect (half-width) instead of the full FB produces an extreme aspect ratio that breaks any shader assuming roughly-square pixels. The 1.7.10 reference uses the full-FB convention; we keep it. The exact failure mode in any given shader pack is implementation-dependent; we don't claim to predict it.
 
 ### Hand renderer per-eye depth
 
@@ -267,7 +272,7 @@ Without this duplication, a kernel-based composite shader (bloom, SSAO, temporal
 
 ### Shadow pass skip on second eye
 
-`MixinShadowRenderer`: short-circuit when `StereoState.getCurrentEye() == RIGHT`. Shadow map is view-independent — the left-eye pass already produced it.
+`MixinShadowRenderer`: short-circuit when `StereoState.getCurrentEye() == RIGHT`. For directional-light shadow maps rendered from the sun/moon perspective, the output is independent of the camera view, so the left-eye pass already produced the correct shadow map for the right eye to read. Direct port of Angelica commit `3d853ef5`, where the same skip yielded a meaningful framerate gain. If a shader pack ever ships with view-frustum-dependent cascaded shadows, this skip will need to be conditioned — we cross that bridge if we hit it.
 
 ### Final pass + composite
 
@@ -276,7 +281,17 @@ Without this duplication, a kernel-based composite shader (bloom, SSAO, temporal
 
 ### Pipeline rebuild on stereo toggle
 
-When `mode` flips `OFF ↔ SBS_HALF`, `stereoEyeCount()` changes. Next time Iris's `RenderTargets` queries it, sized targets will mismatch. We trip Iris's internal resize-on-mismatch path to force reallocation. No full pipeline rebuild needed.
+When `mode` flips `OFF ↔ SBS_HALF`, `stereoEyeCount()` changes and Iris's `RenderTargets` is now sized wrong (mono targets vs. stereo, or vice versa). We force a full Iris pipeline rebuild on the toggle, matching the 1.7.10 reference (Angelica commit `ff9f23f3`):
+
+```
+Iris.destroyPipeline()
+Iris.preparePipeline(currentDimension)
+worldRenderer.reload()        // 1.21 equivalent of 1.7.10's renderGlobal.loadRenderers()
+```
+
+This drops Sodium's stale chunk/texture refs alongside Iris's targets. ~50–150ms hitch on toggle, acceptable for a video-settings flip. Driven from the Sodium options page binding the moment `StereoMode` changes (not on next frame — Iris init reads `stereoEyeCount()` synchronously when the new pipeline is prepared).
+
+The rebuild is skipped when Iris isn't loaded (`isModLoaded("iris")` gate) and when the world is null (server screen, main menu).
 
 ## Sodium integration
 
@@ -286,7 +301,7 @@ Sodium 0.8.7 is a hard dependency. Sodium mixins live in `stereoscopic.mixins.js
 
 `MixinRenderSectionManager` (or 0.8 equivalent — exact method name verified during scaffolding):
 - `@Inject(HEAD)` on `updateChunks(...)` → `if (StereoState.currentEye() == RIGHT) ci.cancel()`.
-- Chunks that become visible only on the right eye won't upload until next frame's left eye. Negligible — IPD is ~0.064 m, sub-block.
+- A chunk straddling a visibility boundary between the two eye frustums won't upload on the right eye until the next frame's left-eye pass picks it up. IPD is ~0.064 m (an eighth of a block), so the worst case is a one-frame stagger on a chunk near a chunk-boundary at glancing angle. Acceptable — same trade the Angelica reference makes (commit `e4b6900b`).
 
 ### Add stereo controls to Sodium's options page
 
@@ -294,7 +309,6 @@ Sodium 0.8.7 is a hard dependency. Sodium mixins live in `stereoscopic.mixins.js
 
 - **Mode** — cycle: OFF / SBS_HALF
 - **IPD** — slider: 0.0..0.5, step 0.001, default 0.064
-- **Debug force eye** — cycle: OFF / LEFT / RIGHT
 
 Controls bind directly to `StereoOptions` fields. Live-apply: changes affect next frame.
 
@@ -302,12 +316,12 @@ Controls bind directly to `StereoOptions` fields. Live-apply: changes affect nex
 
 ## Async OS cursor
 
-A real OS arrow cursor is rendered into both eye halves at the native mouse-polling rate (~1 kHz), independent of the main render rate. Direct functional port of the 1.7.10 cursor system, restructured behind a backend interface.
+A real OS arrow cursor is rendered into both eye halves on a dedicated thread that swaps its own GLFW window's buffers, independent of the main render thread's framerate. Direct functional port of the 1.7.10 cursor system, restructured behind a backend interface.
 
 ### Module layout (`cursor/`)
 
 - `CursorBackend` — interface. Methods: `captureArrowBitmap()` returning BGRA pixels of the OS arrow at current DPI, `trapCursor(boolean clip)`, `release()`.
-- `WindowsCursorBackend` — only impl in v1. Uses `LoadCursorW(NULL, IDC_ARROW)` + `GetIconInfo` + `DrawIconEx` for sprite capture, `ClipCursor()` for the trap. Per the `project_mc_cursor_static` memory note, `LoadCursorW(IDC_ARROW)` is the correct call (not `GetCursor()`, which returns whatever cursor MC has set mid-frame).
+- `WindowsCursorBackend` — only impl in v1. Uses `LoadCursorW(NULL, IDC_ARROW)` + `GetIconInfo` + `DrawIconEx` for sprite capture, `ClipCursor()` for the trap. **Use `LoadCursorW(NULL, IDC_ARROW)` for capture, not `GetCursor()`.** `GetCursor()` returns whatever cursor Windows is *currently* displaying system-wide, which can transiently be a wait spinner if a background process briefly takes cursor control at the moment of capture; with a one-shot capture you'd then be stuck rendering the spinner for the session. `LoadCursorW(NULL, IDC_ARROW)` always returns the standard system arrow regardless of system state. (Verified empirically in Angelica on 2026-05-12 after a first attempt with `GetCursor()` produced the spinner.)
 - `NoOpCursorBackend` — fallback for non-Windows hosts. Cursor feature silently disabled; stereo still works.
 - `CursorPresentThread` — the worker. Owns a hidden GLFW window with a shared GL context bound to MC's main window (created via `glfwCreateWindow(1, 1, "", NULL, mainWindowHandle)`). Loops: read latest `(x, y)` from a triple-buffered slot, draw the cursor sprite at the eye-mapped positions, `glFlush`, hand to main thread for present. Triple-buffered handoff matches 1.7.10 commit `ed1fea00`.
 - `StereoCursor` — main-thread facade. `start()` / `stop()` driven by `StereoState.beginFrame()`. `poll(x, y)` for the main thread to publish the user's logical cursor position. `trap(enabled)` for gameplay vs GUI mode.
@@ -318,7 +332,7 @@ Mouse logical position `(mx, my)` is in full-screen GUI coordinates. The cursor 
 - Left eye: `(mx/2, my)` in left-eye viewport space.
 - Right eye: `(mx/2 + w/2, my)` in right-eye viewport space.
 
-Same horizontal compression rule as scissor remap, per the `project_stereo_sbs_x_compression` memory note: sprites drawn at full-screen coords need half X width and half X anchor because SBS only compresses horizontally.
+Same horizontal compression rule as scissor remap. Each eye half holds one eye's view at half the window width, and the downstream viewer stretches each half back to full width before displaying — so anything drawn directly into the SBS composite (cursor sprite, future overlays) needs its X dimension *and* X anchor halved or it shows up 2× wide on the headset. Y is unaffected; SBS only compresses horizontally. The input-side counterpart of this is the mouse-X delta halving in `MixinMouseHandler` above.
 
 ### Cursor trap during gameplay
 
@@ -326,7 +340,7 @@ When stereo is active AND no `Screen` is open AND the window has focus: `Windows
 
 When a screen opens, the window loses focus, or stereo deactivates: `trapCursor(false)`.
 
-**We do not use `glfwSetInputMode(GLFW_CURSOR_DISABLED)`** — that hides the OS cursor and breaks raw input, per the `project_mc_cursor_static` memory note.
+**We do not use `glfwSetInputMode(GLFW_CURSOR_HIDDEN)` or `GLFW_CURSOR_DISABLED`** to suppress the OS cursor. On 1.7.10 + lwjgl3ify (Angelica), `CURSOR_HIDDEN` was empirically observed to break GUI mouse movement entirely; whether that translates to Fabric 1.21's input pipeline is unverified, but the OS cursor is also empirically not visibly duplicated in stereo SBS mode (Windows seems to suppress its own draw while the game window owns the cursor), so there's nothing to hide in the first place. The right answer is to leave OS cursor visibility alone and only use `ClipCursor()` to confine the cursor to the window.
 
 ### Lifecycle
 
@@ -365,13 +379,13 @@ When a screen opens, the window loses focus, or stereo deactivates: `trapCursor(
     { "config": "stereoscopic-iris.mixins.json", "environment": "client" }
   ],
   "depends": {
-    "fabricloader": ">=0.19.0",
+    "fabricloader": ">=0.19.2",
     "minecraft": "~1.21.11",
     "java": ">=21",
-    "sodium": "0.8.7"
+    "sodium": ">=0.8.11"
   },
-  "recommends": { "iris": "1.10.7" },
-  "breaks": { "iris": "<1.10.7 || >=1.11.0" }
+  "recommends": { "iris": ">=1.10.7" },
+  "breaks": { "iris": "<1.10.7" }
 }
 ```
 
@@ -389,15 +403,15 @@ Stereo rendering can't really be unit-tested. The plan is a checklist run by han
 
 | Feature | Verification |
 |---|---|
-| **A** Two-pass world + camera offset | `debugForceEye = LEFT` → world appears shifted right; `RIGHT` → shifted left. Toggle stereo on → see two halves with appropriate parallax. |
+| **A** Two-pass world + camera offset | Toggle stereo on → two halves render with appropriate parallax (closer objects diverge more between halves). Crossing your eyes on the SBS output should fuse into a 3D image. |
 | **B** HUD + screen duplication | HUD elements (hotbar, health, chat) visible in both halves. Open inventory → screen renders correctly in both halves; tooltip hit-test uses one logical cursor. |
 | **D** Iris shaderpack | With Complementary Reimagined 5.6.1: no asymmetric bloom/SSAO artifacts; per-eye RenderTargets confirmed by checking framebuffer dump. |
-| **E** Sodium chunk-update skip | Stereo on vs stereo off in identical scene: chunk-upload counter (Sodium F3 debug overlay) shows ~half the rate per frame. |
-| **E** Iris shadow-pass skip | F3 shader stats show one shadow pass per frame regardless of mode. |
+| **E** Sodium chunk-update skip | Stereo on vs stereo off in identical scene: any Sodium-provided chunk-upload metric (F3 overlay if it exposes one, otherwise instrument the skipped path with a counter) shows ~half the rate per frame. |
+| **E** Iris shadow-pass skip | Frame time in a shadow-heavy scene measurably improves with stereo on, and a counter instrumented on the skipped path fires once per frame regardless of mode. |
 | **F** Dynamic toggle | Open Sodium video settings during gameplay, flip Mode OFF→SBS_HALF: stereo activates on next frame, no restart, no crash, RenderTargets reallocate. |
 | **G** Async cursor | OS arrow visible in both eye halves; cursor stays smooth when main render drops to 30fps; cursor trapped to window during gameplay. |
 
-The `debugForceEye` knob is the primary correctness tool — lets us validate camera math and per-eye target allocation without putting on a headset.
+(Pre-v0.1.0, a `debugForceEye` JSON toggle existed to validate camera math one eye at a time without a headset; it was removed once the two-pass path proved correct end-to-end.)
 
 ### What's not tested in v1
 
@@ -412,6 +426,6 @@ Start at `0.1.0`. Mark `experimental` in description until cross-feature stabili
 ## Open questions and risks
 
 - **Sodium 0.8.7 / Iris 1.10.7 internal class layout.** This spec uses 1.7.10 fork class names (`RenderTargets`, `SodiumGameOptions`, `RenderSectionManager`, `IrisRenderingPipeline`, etc.). Sodium 0.6+ and Iris 1.8+ may have renamed or restructured these. Exact target-class verification happens during scaffolding (Plan step 1).
-- **1.21 `RenderPipeline` interaction.** 1.21.5+ introduced declarative `RenderPipeline` objects. Vanilla world rendering still funnels through `LevelRenderer.renderLevel`, so the two-pass approach holds, but mid-pipeline GL state assumptions need verifying against the new pipeline.
+- **1.21 `RenderPipeline` interaction.** Recent 1.21.x patches have been moving vanilla rendering toward declarative `RenderPipeline` objects. If 1.21.11 has already absorbed enough of that work that mid-pipeline `RenderSystem.viewport` calls aren't the canonical state-change anymore, the viewport-intercept design needs revisiting. To verify in the scaffolding phase: open `LevelRenderer.renderLevel` and `RenderSystem` in 1.21.11 and confirm `RenderSystem.viewport` is still the call we need to mixin.
 - **Cursor thread + GLFW swap-buffer race.** The 1.7.10 implementation manages cursor-thread / main-thread swap ordering on a per-OS basis. On 1.21 we use GLFW everywhere, which simplifies but doesn't eliminate the coordination problem. The implementation plan should call out the swap-synchronization choice explicitly.
 - **Yarn vs Mojmap mappings.** This spec assumes yarn class names because that's standard for Fabric mods. If we switch to Mojmap (intermediary-stable), mixin `@At` targets need updating but no other architectural change.

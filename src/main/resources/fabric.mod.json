@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "stereoscopic",
+  "version": "${version}",
+  "name": "StereoCraft: Stereoscopic 3D",
+  "description": "Side-by-side (SBS) stereoscopic 3D rendering for 3D TVs, 3D monitors, and SBS-compatible displays.",
+  "authors": ["Mitchell Marx"],
+  "contact": {
+    "homepage": "https://github.com/mitchellmarx/Stereoscopic",
+    "sources": "https://github.com/mitchellmarx/Stereoscopic",
+    "issues": "https://github.com/mitchellmarx/Stereoscopic/issues"
+  },
+  "license": "LGPL-3.0-only",
+  "icon": "assets/stereoscopic/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.mitchellmarx.stereoscopic.Stereoscopic"],
+    "sodium:config_api_user": ["com.mitchellmarx.stereoscopic.gui.StereoOptionsPage"]
+  },
+  "mixins": [
+    "stereoscopic.mixins.json",
+    { "config": "stereoscopic-iris.mixins.json", "environment": "client" }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "~${minecraft_version}",
+    "java": ">=21",
+    "sodium": ">=0.8.11"
+  },
+  "recommends": { "iris": ">=1.10.7" },
+  "breaks": { "iris": "<1.10.7 || >=1.11.0" }
+}

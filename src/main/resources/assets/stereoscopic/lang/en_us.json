@@ -1,0 +1,9 @@
+{
+  "stereoscopic.options.group.name": "Stereoscopic",
+  "stereoscopic.options.mode.name": "Mode",
+  "stereoscopic.options.mode.tooltip": "Selects the stereoscopic output mode. SBS Half splits the framebuffer left/right at half horizontal resolution per eye, suitable for VR virtual-monitor passthrough and 3D SBS displays.",
+  "stereoscopic.options.mode.off": "Off",
+  "stereoscopic.options.mode.sbs_half": "SBS Half",
+  "stereoscopic.options.ipd.name": "IPD (meters)",
+  "stereoscopic.options.ipd.tooltip": "Interpupillary distance — the horizontal eye separation used to compute per-eye camera offset. Default 0.064 m matches the human-average IPD."
+}

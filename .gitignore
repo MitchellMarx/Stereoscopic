@@ -1,0 +1,21 @@
+.gradle/
+build/
+out/
+bin/
+run/
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.DS_Store
+
+# Local reference-extract dirs (decompiled MC/Iris/Sodium/Voxy/LWJGL sources
+# pulled in for cross-referencing — not part of the build).
+.*_extract/
+
+# Local scratch space for experiments.
+.scratch/
+
+# Per-user Claude Code settings.
+.claude/settings.local.json
