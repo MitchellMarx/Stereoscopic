@@ -10,6 +10,7 @@ class StereoStateTest {
     void resetOptions() {
         StereoOptions.INSTANCE.mode = StereoMode.OFF;
         StereoOptions.INSTANCE.ipd = 0.064f;
+        StereoOptions.INSTANCE.convergence = 4.0f;
         StereoState.INSTANCE.endFrame();
     }
 
@@ -60,7 +61,8 @@ class StereoStateTest {
     @Test
     void endFrameClearsActiveButKeepsFrameSnapshot() {
         StereoOptions.INSTANCE.mode = StereoMode.SBS_HALF;
-        StereoOptions.INSTANCE.ipd = 0.080f;
+        StereoOptions.INSTANCE.ipd = 0.075f;
+        StereoOptions.INSTANCE.convergence = 8.0f;
         StereoState.INSTANCE.beginFrame(1920, 1080);
         StereoState.INSTANCE.setEye(StereoState.Eye.RIGHT);
         StereoState.INSTANCE.endFrame();
@@ -69,9 +71,27 @@ class StereoStateTest {
             "endFrame clears active");
         assertEquals(StereoState.Eye.MONO, StereoState.INSTANCE.getCurrentEye(),
             "endFrame resets currentEye to MONO");
-        assertEquals(0.080f, StereoState.INSTANCE.getFrameIpd(), 1e-7f,
+        assertEquals(0.075f, StereoState.INSTANCE.getFrameIpd(), 1e-7f,
             "endFrame must NOT clear frameIpd — post-frame callbacks need it");
         assertEquals(StereoMode.SBS_HALF, StereoState.INSTANCE.getFrameMode(),
             "endFrame must NOT clear frameMode");
+        assertEquals(8.0f, StereoState.INSTANCE.getFrameConvergence(), 1e-7f,
+            "endFrame must NOT clear frameConvergence");
+    }
+
+    @Test
+    void beginFrameSnapshotsConvergenceFromOptions() {
+        // frameConvergence must be cached at beginFrame, NOT read live from
+        // StereoOptions — a mid-frame slider change between camera-position
+        // shift (uses frameIpd) and projection shear (uses frameConvergence)
+        // would otherwise desync the two halves of the off-axis stereo math.
+        StereoOptions.INSTANCE.mode = StereoMode.SBS_HALF;
+        StereoOptions.INSTANCE.convergence = 6.0f;
+        StereoState.INSTANCE.beginFrame(1920, 1080);
+        assertEquals(6.0f, StereoState.INSTANCE.getFrameConvergence(), 1e-7f);
+
+        StereoOptions.INSTANCE.convergence = 12.0f;
+        assertEquals(6.0f, StereoState.INSTANCE.getFrameConvergence(), 1e-7f,
+            "frameConvergence stays at beginFrame snapshot, not live options value");
     }
 }

@@ -19,6 +19,7 @@ public final class StereoState {
     // can still read the mode that was active for the frame just rendered.
     private StereoMode frameMode = StereoMode.OFF;
     private float frameIpd = 0.064f;
+    private float frameConvergence = 4.0f;
 
     private int frameFbW, frameFbH;
 
@@ -38,6 +39,7 @@ public final class StereoState {
         StereoOptions o = StereoOptions.INSTANCE;
         this.frameMode = o.mode;
         this.frameIpd = o.ipd;
+        this.frameConvergence = o.convergence;
         this.frameFbW = fbW;
         this.frameFbH = fbH;
         this.active = frameMode.isActive();
@@ -60,6 +62,7 @@ public final class StereoState {
     public Eye     getCurrentEye() { return currentEye; }
     public StereoMode getFrameMode() { return frameMode; }
     public float      getFrameIpd()  { return frameIpd; }
+    public float      getFrameConvergence() { return frameConvergence; }
     public int getFrameFbW() { return frameFbW; }
     public int getFrameFbH() { return frameFbH; }
 
