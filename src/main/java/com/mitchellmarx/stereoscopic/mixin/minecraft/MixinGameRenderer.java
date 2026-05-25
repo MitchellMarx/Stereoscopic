@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mitchellmarx.stereoscopic.Stereoscopic;
+import com.mitchellmarx.stereoscopic.compat.iris.PerEyeRenderTargetHooks;
 import com.mitchellmarx.stereoscopic.core.StereoMath;
 import com.mitchellmarx.stereoscopic.core.StereoState;
 import com.mitchellmarx.stereoscopic.cursor.StereoCursor;
@@ -34,11 +35,33 @@ public abstract class MixinGameRenderer {
 
     @Shadow @Final private MinecraftClient client;
 
+    /** True once we've forced Iris's pipeline to rebuild after first stereo activation. */
+    private static boolean stereoscopic$irisRebuiltForStereo = false;
+
     @Inject(method = "render(Lnet/minecraft/client/render/RenderTickCounter;Z)V", at = @At("HEAD"))
     private void stereoscopic$beginFrame(RenderTickCounter tracker, boolean tick, CallbackInfo ci) {
         Window w = client.getWindow();
         StereoState.INSTANCE.beginFrame(w.getFramebufferWidth(), w.getFramebufferHeight());
         StereoCursor.tick();
+        stereoscopic$ensureIrisRebuiltForStereo();
+    }
+
+    /**
+     * When stereo is enabled in stereoscopic-options.json AND a shaderpack is loaded
+     * at game launch, Iris's pipeline init runs before our scratch-FB + per-eye
+     * RenderTargets ever fire. The cached pipeline state breaks per-eye world
+     * rendering, and the user has to toggle shaders off+on to force a rebuild.
+     * The Sodium options-page Mode binding already drives
+     * {@link PerEyeRenderTargetHooks#rebuildPipelineForStereoToggle()} on each
+     * toggle; replicate the same trigger once on the first stereo-active frame
+     * so startup-with-stereo-already-on works without manual intervention.
+     */
+    private void stereoscopic$ensureIrisRebuiltForStereo() {
+        if (stereoscopic$irisRebuiltForStereo) return;
+        if (!StereoState.INSTANCE.isActive()) return;
+        if (client.world == null) return;
+        PerEyeRenderTargetHooks.rebuildPipelineForStereoToggle();
+        stereoscopic$irisRebuiltForStereo = true;
     }
 
     /**
