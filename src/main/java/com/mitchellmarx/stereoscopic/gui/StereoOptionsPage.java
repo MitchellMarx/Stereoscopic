@@ -22,8 +22,9 @@ public final class StereoOptionsPage implements ConfigEntryPoint {
 
     private static final String MODID = Stereoscopic.MOD_ID;
 
-    private static final Identifier ID_MODE = Identifier.of(MODID, "mode");
-    private static final Identifier ID_IPD  = Identifier.of(MODID, "ipd");
+    private static final Identifier ID_MODE        = Identifier.of(MODID, "mode");
+    private static final Identifier ID_IPD         = Identifier.of(MODID, "ipd");
+    private static final Identifier ID_CONVERGENCE = Identifier.of(MODID, "convergence");
 
     private final StorageEventHandler storageFlush = () -> {
         try { StereoOptions.INSTANCE.save(); }
@@ -56,6 +57,18 @@ public final class StereoOptionsPage implements ConfigEntryPoint {
                         .setBinding(mm -> StereoOptions.INSTANCE.ipd = clampedMetersFromMm(mm),
                                     () -> Math.round(StereoOptions.INSTANCE.ipd * 1000f))
                         .setStorageHandler(storageFlush))
+                    .addOption(builder.createIntegerOption(ID_CONVERGENCE)
+                        .setName(Text.translatable("stereoscopic.options.convergence.name"))
+                        .setTooltip(Text.translatable("stereoscopic.options.convergence.tooltip"))
+                        .setRange(0, 16, 1)
+                        .setValueFormatter(b -> b == 0
+                            ? Text.translatable("stereoscopic.options.convergence.off")
+                            : Text.translatable("stereoscopic.options.convergence.blocks", b))
+                        .setDefaultValue(4)
+                        .setBinding(b -> StereoOptions.INSTANCE.convergence = clampedConvergence(b),
+                                    () -> Math.round(StereoOptions.INSTANCE.convergence))
+                        .setImpact(OptionImpact.LOW)
+                        .setStorageHandler(storageFlush))
                 ));
     }
 
@@ -76,6 +89,10 @@ public final class StereoOptionsPage implements ConfigEntryPoint {
     private static float clampedMetersFromMm(int mm) {
         int clamped = Math.max(0, Math.min(500, mm));
         return clamped / 1000.0f;
+    }
+
+    private static float clampedConvergence(int blocks) {
+        return Math.max(0, Math.min(16, blocks));
     }
 
     private static Text modeName(StereoMode m) {

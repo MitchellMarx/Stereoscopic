@@ -33,6 +33,10 @@ public final class StereoOptionsIO {
                 float v = obj.get("ipd").getAsFloat();
                 target.ipd = Math.max(0f, Math.min(0.5f, v));
             }
+            if (obj.has("convergence")) {
+                float v = obj.get("convergence").getAsFloat();
+                target.convergence = Math.max(0f, Math.min(16f, v));
+            }
         } catch (IOException | JsonParseException e) {
             Stereoscopic.LOG.error("Failed to read {}; keeping in-memory defaults", path, e);
         }
@@ -44,6 +48,7 @@ public final class StereoOptionsIO {
             JsonObject obj = new JsonObject();
             obj.addProperty("mode", source.mode.name());
             obj.addProperty("ipd", source.ipd);
+            obj.addProperty("convergence", source.convergence);
             Files.writeString(path, GSON.toJson(obj), StandardCharsets.UTF_8);
         } catch (IOException e) {
             Stereoscopic.LOG.error("Failed to write {}", path, e);

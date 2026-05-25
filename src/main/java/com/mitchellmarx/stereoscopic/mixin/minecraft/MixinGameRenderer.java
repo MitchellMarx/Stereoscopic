@@ -1,8 +1,10 @@
 package com.mitchellmarx.stereoscopic.mixin.minecraft;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mitchellmarx.stereoscopic.Stereoscopic;
+import com.mitchellmarx.stereoscopic.core.StereoMath;
 import com.mitchellmarx.stereoscopic.core.StereoState;
 import com.mitchellmarx.stereoscopic.cursor.StereoCursor;
 import com.mitchellmarx.stereoscopic.render.PerEyeRenderer;
@@ -16,6 +18,7 @@ import net.minecraft.client.render.RenderTickCounter;
 import net.minecraft.client.texture.GlTexture;
 import net.minecraft.client.util.Window;
 import net.minecraft.util.math.Vec3d;
+import org.joml.Matrix4f;
 import org.joml.Vector3fc;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
@@ -36,6 +39,44 @@ public abstract class MixinGameRenderer {
         Window w = client.getWindow();
         StereoState.INSTANCE.beginFrame(w.getFramebufferWidth(), w.getFramebufferHeight());
         StereoCursor.tick();
+    }
+
+    /**
+     * Off-axis frustum shear applied to each eye's projection. Skews the
+     * matrix so the eye's view converges toward the configured convergence
+     * distance: objects at that depth sit at the screen plane (zero parallax),
+     * closer objects pop out, farther ones recede.
+     *
+     * <p>This is a new feature relative to the Angelica reference. Both
+     * Angelica trees (sbs2 mod-on-modern, and the older fork-style port) use
+     * parallel-axis stereo and explicitly disable any per-eye projection shear
+     * - see {@code angelica$applyStereoProjectionOffset} in Angelica-sbs2's
+     * {@code MixinEntityRenderer_StereoCamera}, which fences the shear behind
+     * {@code if (true) return} with the rationale "parallel-axis stereo
+     * avoids the asymmetric-frustum gap between eyes". This mod ships
+     * off-axis ON by default; the justification lives on
+     * {@link com.mitchellmarx.stereoscopic.core.StereoOptions#convergence}.
+     *
+     * <p>The math is in {@link StereoMath#convergenceShear(float, float)} -
+     * see that JavaDoc for the full sign derivation. The sign of
+     * {@code StereoState.getEyeOffset()} is opposite to Angelica's
+     * ({@code -ipd/2} for LEFT here vs {@code +ipd/2} there); the formula
+     * carries the sign through correctly for both conventions.
+     *
+     * <p>Callsite coverage: {@code GameRenderer.getBasicProjectionMatrix} is
+     * called from {@code renderWorld} (the per-eye-wrapped path that triggers
+     * this shear via {@code isInWorldPass()}) and from item/hand model
+     * projection setup. The {@code isInWorldPass()} gate intentionally skips
+     * the latter - first-person item/hand projection is set up outside the
+     * per-eye loop, so it stays at the un-sheared center projection. Stereo
+     * separation for first-person hand still comes from the camera offset
+     * applied in {@code stereoscopic$twoPassRenderWorld}.
+     */
+    @ModifyReturnValue(method = "getBasicProjectionMatrix(F)Lorg/joml/Matrix4f;", at = @At("RETURN"))
+    private Matrix4f stereoscopic$applyConvergenceShear(Matrix4f proj) {
+        StereoState s = StereoState.INSTANCE;
+        if (!s.isActive() || !s.isInWorldPass()) return proj;
+        return StereoMath.applyConvergenceShear(proj, s.getEyeOffset(), s.getFrameConvergence());
     }
 
     @Inject(method = "render(Lnet/minecraft/client/render/RenderTickCounter;Z)V", at = @At("RETURN"))
@@ -170,7 +211,7 @@ public abstract class MixinGameRenderer {
     }
 
     /**
-     * Direct cast + call — NOT reflection by yarn-name. {@code getField("glId")}
+     * Direct cast + call - NOT reflection by yarn-name. {@code getField("glId")}
      * silently fails in production because Loom doesn't remap reflection string
      * literals; the runtime field name is {@code field_XXXXX}. See
      * feedback_no_reflection_by_yarn_name.

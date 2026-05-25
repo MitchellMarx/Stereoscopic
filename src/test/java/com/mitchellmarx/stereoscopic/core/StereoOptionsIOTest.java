@@ -14,6 +14,7 @@ class StereoOptionsIOTest {
         StereoOptions o = new StereoOptions();
         o.mode = StereoMode.SBS_HALF;
         o.ipd = 0.075f;
+        o.convergence = 8.0f;
 
         StereoOptionsIO.writeTo(file, o);
 
@@ -22,6 +23,7 @@ class StereoOptionsIOTest {
 
         assertEquals(StereoMode.SBS_HALF, loaded.mode);
         assertEquals(0.075f, loaded.ipd, 1e-6f);
+        assertEquals(8.0f, loaded.convergence, 1e-6f);
     }
 
     @Test
@@ -30,6 +32,7 @@ class StereoOptionsIOTest {
         StereoOptionsIO.readInto(tmp.resolve("nope.json"), loaded);
         assertEquals(StereoMode.OFF, loaded.mode);
         assertEquals(0.064f, loaded.ipd, 1e-6f);
+        assertEquals(4.0f, loaded.convergence, 1e-6f);
     }
 
     @Test
@@ -41,6 +44,8 @@ class StereoOptionsIOTest {
         StereoOptionsIO.readInto(file, loaded);
         assertEquals(StereoMode.OFF, loaded.mode);
         assertEquals(0.080f, loaded.ipd, 1e-6f);
+        assertEquals(4.0f, loaded.convergence, 1e-6f,
+            "convergence missing from JSON, default preserved");
     }
 
     @Test
@@ -51,5 +56,22 @@ class StereoOptionsIOTest {
         StereoOptions loaded = new StereoOptions();
         StereoOptionsIO.readInto(file, loaded);
         assertEquals(0.5f, loaded.ipd, 1e-6f, "IPD clamped to [0.0, 0.5]");
+    }
+
+    @Test
+    void convergenceIsClampedOnRead(@TempDir Path tmp) throws Exception {
+        Path hi = tmp.resolve("hi.json");
+        Files.writeString(hi, "{ \"convergence\": 99.0 }");
+        StereoOptions loadedHi = new StereoOptions();
+        StereoOptionsIO.readInto(hi, loadedHi);
+        assertEquals(16.0f, loadedHi.convergence, 1e-6f,
+            "convergence clamped to [0, 16]");
+
+        Path lo = tmp.resolve("lo.json");
+        Files.writeString(lo, "{ \"convergence\": -5.0 }");
+        StereoOptions loadedLo = new StereoOptions();
+        StereoOptionsIO.readInto(lo, loadedLo);
+        assertEquals(0.0f, loadedLo.convergence, 1e-6f,
+            "convergence clamped to [0, 16]; 0 = parallel-axis");
     }
 }
