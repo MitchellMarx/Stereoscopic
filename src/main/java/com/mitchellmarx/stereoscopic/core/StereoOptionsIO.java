@@ -31,7 +31,17 @@ public final class StereoOptionsIO {
             }
             if (obj.has("ipd")) {
                 float v = obj.get("ipd").getAsFloat();
-                target.ipd = Math.max(0f, Math.min(0.5f, v));
+                // Range matches the GUI slider in StereoOptionsPage (55-75 mm).
+                // Older configs from before the slider was narrowed may carry
+                // wider values; clamp and warn so the user notices the change
+                // rather than silently losing their setting on the first save.
+                float clamped = Math.max(0.055f, Math.min(0.075f, v));
+                if (clamped != v) {
+                    Stereoscopic.LOG.warn(
+                        "ipd {} m in {} is outside the 0.055-0.075 m slider range; clamped to {} m",
+                        v, path, clamped);
+                }
+                target.ipd = clamped;
             }
             if (obj.has("convergence")) {
                 float v = obj.get("convergence").getAsFloat();

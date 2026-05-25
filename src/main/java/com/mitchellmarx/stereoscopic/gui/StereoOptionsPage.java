@@ -51,7 +51,7 @@ public final class StereoOptionsPage implements ConfigEntryPoint {
                     .addOption(builder.createIntegerOption(ID_IPD)
                         .setName(Text.translatable("stereoscopic.options.ipd.name"))
                         .setTooltip(Text.translatable("stereoscopic.options.ipd.tooltip"))
-                        .setRange(0, 500, 1)
+                        .setRange(55, 75, 1)
                         .setValueFormatter(mm -> Text.literal(String.format("%.3f m", mm / 1000.0)))
                         .setDefaultValue(64) // 0.064 m
                         .setBinding(mm -> StereoOptions.INSTANCE.ipd = clampedMetersFromMm(mm),
@@ -87,7 +87,7 @@ public final class StereoOptionsPage implements ConfigEntryPoint {
     }
 
     private static float clampedMetersFromMm(int mm) {
-        int clamped = Math.max(0, Math.min(500, mm));
+        int clamped = Math.max(55, Math.min(75, mm));
         return clamped / 1000.0f;
     }
 
