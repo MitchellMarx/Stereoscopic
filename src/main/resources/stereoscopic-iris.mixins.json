@@ -8,6 +8,8 @@
     "MixinRenderTargets",
     "MixinCameraUniforms",
     "MixinMatrixUniforms",
+    "MixinDHCompat",
+    "MixinIrisLodRenderProgram",
     "MixinFinalPassRenderer",
     "MixinIrisRenderingPipeline",
     "MixinShadowRenderer"

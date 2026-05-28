@@ -94,13 +94,18 @@ public final class StereoState {
      * signs; copying its convention here produced eye-swapped stereo because
      * Yarn's {@code Camera.getDiagonalPlane()} resolves to the local right
      * vector with the standard right-handed orientation.
+     *
+     * <p>If {@link StereoOptions#swapEyes} is set, returns the opposite sign
+     * per eye — for SBS displays / VR virtual-monitor setups that interpret
+     * the SBS halves with reversed eye-assignment.
      */
     public float getEyeOffset() {
-        return switch (currentEye) {
+        float base = switch (currentEye) {
             case LEFT  -> -frameIpd * 0.5f;
             case RIGHT -> +frameIpd * 0.5f;
             case MONO  -> 0f;
         };
+        return StereoOptions.INSTANCE.swapEyes ? -base : base;
     }
 
     public int currentEyeIndex() {

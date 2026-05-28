@@ -25,6 +25,7 @@ public final class StereoOptionsPage implements ConfigEntryPoint {
     private static final Identifier ID_MODE        = Identifier.of(MODID, "mode");
     private static final Identifier ID_IPD         = Identifier.of(MODID, "ipd");
     private static final Identifier ID_CONVERGENCE = Identifier.of(MODID, "convergence");
+    private static final Identifier ID_SWAP_EYES   = Identifier.of(MODID, "swap_eyes");
 
     private final StorageEventHandler storageFlush = () -> {
         try { StereoOptions.INSTANCE.save(); }
@@ -67,6 +68,14 @@ public final class StereoOptionsPage implements ConfigEntryPoint {
                         .setDefaultValue(4)
                         .setBinding(b -> StereoOptions.INSTANCE.convergence = clampedConvergence(b),
                                     () -> Math.round(StereoOptions.INSTANCE.convergence))
+                        .setImpact(OptionImpact.LOW)
+                        .setStorageHandler(storageFlush))
+                    .addOption(builder.createBooleanOption(ID_SWAP_EYES)
+                        .setName(Text.translatable("stereoscopic.options.swap_eyes.name"))
+                        .setTooltip(Text.translatable("stereoscopic.options.swap_eyes.tooltip"))
+                        .setDefaultValue(false)
+                        .setBinding(v -> StereoOptions.INSTANCE.swapEyes = v,
+                                    () -> StereoOptions.INSTANCE.swapEyes)
                         .setImpact(OptionImpact.LOW)
                         .setStorageHandler(storageFlush))
                 ));

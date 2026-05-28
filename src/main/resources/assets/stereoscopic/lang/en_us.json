@@ -9,5 +9,7 @@
   "stereoscopic.options.convergence.name": "Convergence distance",
   "stereoscopic.options.convergence.tooltip": "Off-axis convergence depth in blocks. Objects at this depth sit at the screen plane (zero parallax); closer objects pop out, farther ones recede. 0 = parallel-axis (no shear, everything pops out).",
   "stereoscopic.options.convergence.off": "off (parallel)",
-  "stereoscopic.options.convergence.blocks": "%d blocks"
+  "stereoscopic.options.convergence.blocks": "%d blocks",
+  "stereoscopic.options.swap_eyes.name": "Swap eyes",
+  "stereoscopic.options.swap_eyes.tooltip": "Flip which eye's render goes to which physical eye. Toggle if depth appears inverted (objects look behind the screen when they should pop out, or vice versa), or if reflections look like they're for the opposite eye on your SBS display / VR passthrough setup."
 }

@@ -28,6 +28,16 @@ public final class StereoOptions {
      */
     public float convergence = 4.0f;
 
+    /**
+     * Swap which eye-render goes to which physical eye. Some SBS displays /
+     * VR passthrough virtual-monitor setups display the SBS halves in the
+     * opposite eye-assignment than the standard "left half → left eye"
+     * convention. Toggle this if the world looks like it's behind the screen
+     * when it should pop out (or vice-versa), or if reflections / parallax
+     * feel swapped between eyes.
+     */
+    public boolean swapEyes = false;
+
     StereoOptions() {} // package-private for tests; production code uses INSTANCE
 
     public Path configFile() {

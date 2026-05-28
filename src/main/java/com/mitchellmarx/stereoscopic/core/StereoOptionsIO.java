@@ -47,6 +47,9 @@ public final class StereoOptionsIO {
                 float v = obj.get("convergence").getAsFloat();
                 target.convergence = Math.max(0f, Math.min(16f, v));
             }
+            if (obj.has("swapEyes")) {
+                target.swapEyes = obj.get("swapEyes").getAsBoolean();
+            }
         } catch (IOException | JsonParseException e) {
             Stereoscopic.LOG.error("Failed to read {}; keeping in-memory defaults", path, e);
         }
@@ -59,6 +62,7 @@ public final class StereoOptionsIO {
             obj.addProperty("mode", source.mode.name());
             obj.addProperty("ipd", source.ipd);
             obj.addProperty("convergence", source.convergence);
+            obj.addProperty("swapEyes", source.swapEyes);
             Files.writeString(path, GSON.toJson(obj), StandardCharsets.UTF_8);
         } catch (IOException e) {
             Stereoscopic.LOG.error("Failed to write {}", path, e);

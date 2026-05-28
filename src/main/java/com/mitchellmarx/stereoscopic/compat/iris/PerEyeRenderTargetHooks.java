@@ -59,6 +59,15 @@ public final class PerEyeRenderTargetHooks {
     public interface EyeAwareRenderTargets {
         void stereoscopic$setActiveEye(int eyeIndex);
         int stereoscopic$getActiveEye();
+        /**
+         * Map a colortex-bank texture id (LEFT or RIGHT bank, MAIN or ALT) to the
+         * active eye's equivalent. Used to remap statically-captured texture ids
+         * (e.g., {@code FinalPassRenderer$SwapPass.targetTexture}) that aren't
+         * re-bound by {@link #stereoscopic$setActiveEye(int)}'s framebuffer walk.
+         * Returns the input unchanged if not a tracked bank texture or stereo is
+         * inactive.
+         */
+        int stereoscopic$resolveActiveEyeTexId(int referenceTexId);
     }
 
     public static int getActiveEye() {
@@ -107,6 +116,22 @@ public final class PerEyeRenderTargetHooks {
             t.stereoscopic$setActiveEye(eyeIndex);
         } catch (Throwable th) {
             Stereoscopic.LOG.warn("setActiveEye({}) failed; eye textures may desync this frame", eyeIndex, th);
+        }
+    }
+
+    /**
+     * Map a captured colortex texture id to the currently-active eye's equivalent.
+     * No-op when Iris isn't present, no targets are registered, or the input id
+     * isn't a tracked bank texture.
+     */
+    public static int resolveActiveEyeTexId(int referenceTexId) {
+        if (!IRIS_PRESENT) return referenceTexId;
+        EyeAwareRenderTargets t = activeTargets;
+        if (t == null) return referenceTexId;
+        try {
+            return t.stereoscopic$resolveActiveEyeTexId(referenceTexId);
+        } catch (Throwable th) {
+            return referenceTexId;
         }
     }
 

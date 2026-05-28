@@ -150,6 +150,33 @@ public abstract class MixinRenderTargets implements PerEyeRenderTargetHooks.EyeA
         return stereoscopic$activeEye;
     }
 
+    /**
+     * Resolve a captured colortex texture id (LEFT or RIGHT bank, MAIN or ALT) to
+     * the currently-active eye's equivalent. Used by
+     * {@link com.mitchellmarx.stereoscopic.mixin.iris.MixinFinalPassRenderer} to
+     * remap {@code FinalPassRenderer$SwapPass.targetTexture} — a raw int field
+     * captured at pipeline build time pointing to LEFT-bank MAIN, never updated
+     * by {@link #stereoscopic$setActiveEye(int)}'s framebuffer-attachment walk.
+     * Without this remap the per-frame ALT→MAIN copy that backs Complementary's
+     * {@code colortex7} reflection cache (and {@code colortex2} TAA history)
+     * writes RIGHT-eye ALT data into LEFT-bank MAIN every frame, leaving
+     * RIGHT-bank MAIN never written.
+     */
+    @Override
+    public int stereoscopic$resolveActiveEyeTexId(int referenceTexId) {
+        if (!stereoscopic$enabled) return referenceTexId;
+        int meta = stereoscopic$reverseMap.get(referenceTexId);
+        if (meta < 0) return referenceTexId;
+        int colortexIdx = meta >>> 1;
+        boolean isAlt = (meta & 1) == 1;
+        if (colortexIdx < 0 || colortexIdx >= targets.length) return referenceTexId;
+        RenderTarget rt = (stereoscopic$activeEye == 0)
+            ? targets[colortexIdx]
+            : (stereoscopic$rightTargets != null ? stereoscopic$rightTargets[colortexIdx] : null);
+        if (rt == null) return referenceTexId;
+        return isAlt ? rt.getAltTexture() : rt.getMainTexture();
+    }
+
     @Override
     public void stereoscopic$setActiveEye(int eyeIndex) {
         if (!stereoscopic$enabled) return;

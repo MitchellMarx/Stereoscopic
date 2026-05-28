@@ -2,6 +2,7 @@ package com.mitchellmarx.stereoscopic.mixin.minecraft;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mitchellmarx.stereoscopic.core.StereoOptions;
 import com.mitchellmarx.stereoscopic.core.StereoState;
 import com.mitchellmarx.stereoscopic.render.PerEyeRenderer;
 import com.mitchellmarx.stereoscopic.render.StereoBlur;
@@ -50,11 +51,19 @@ public abstract class MixinGuiRenderer {
      * {@code scissorArea} also overrides any global scissor. The robust way
      * to clip the HUD to an eye's half is to compress the GUI coordinate
      * system at the model-view level — the full-FB ortho projection then
-     * maps the compressed coords to the correct NDC half:
+     * maps the compressed coords to the correct NDC half.
+     *
+     * <p>Which half each eye lands in depends on {@link StereoOptions#swapEyes},
+     * so this mirrors {@link com.mitchellmarx.stereoscopic.render.ViewportMath#eyeRect}'s
+     * swap branch — otherwise the world (which IS routed through the
+     * swap-aware viewport) and the HUD (which is routed by this model-view
+     * scaling) land on opposite halves, leaving the per-eye blur backdrop
+     * stacked on one eye's world render with the other eye's HUD elements
+     * floating on top.
      *
      * <ul>
-     *   <li>LEFT: scale x by 0.5 → GUI (0..W) → (0..W/2) → NDC (-1..0)</li>
-     *   <li>RIGHT: scale x by 0.5 then translate +W/2 → NDC (0..+1)</li>
+     *   <li>"Left half" (NDC -1..0): scale x by 0.5</li>
+     *   <li>"Right half" (NDC 0..+1): scale x by 0.5, translate +W/2</li>
      * </ul>
      *
      * <p>{@code renderPreparedDraws} builds its model-view via
@@ -76,10 +85,17 @@ public abstract class MixinGuiRenderer {
         Window w = MinecraftClient.getInstance().getWindow();
         float guiW = (float) w.getFramebufferWidth() / (float) w.getScaleFactor();
 
+        boolean leftHalf;
+        if (StereoOptions.INSTANCE.swapEyes) {
+            leftHalf = (s.getCurrentEye() == StereoState.Eye.RIGHT);
+        } else {
+            leftHalf = (s.getCurrentEye() == StereoState.Eye.LEFT);
+        }
+
         Matrix4f m = new Matrix4f(original);
-        if (s.getCurrentEye() == StereoState.Eye.LEFT) {
+        if (leftHalf) {
             m.scale(0.5f, 1f, 1f);
-        } else if (s.getCurrentEye() == StereoState.Eye.RIGHT) {
+        } else {
             m.translate(guiW * 0.5f, 0f, 0f).scale(0.5f, 1f, 1f);
         }
         return m;
